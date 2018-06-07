@@ -104,6 +104,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "elfx86exts"
 version = "0.4.1-alpha.1"
 dependencies = [
+ "ansi_term 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "assert_cmd 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "capstone 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",

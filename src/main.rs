@@ -10,6 +10,7 @@ extern crate capstone;
 extern crate clap;
 extern crate memmap;
 extern crate object;
+extern crate ansi_term;
 
 use capstone::{Arch, Capstone, Mode, NO_EXTRA_MODE};
 use object::{Object, ObjectSection, SectionKind};
@@ -18,6 +19,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs::File;
 use std::path::PathBuf;
+use ansi_term::Colour::*;
+
 
 /// These are from capstone/include/x86.h, which is super sketchy since the
 /// enum values are not specificied explicitly.
@@ -171,6 +174,13 @@ fn main() {
              ELF and MachO formats, and possibly others.",
         )
         .arg(
+            clap::Arg::with_name("ext")
+                .takes_value(true)
+                .short("e")
+                .long("ext")
+                .multiple(true)
+        )
+        .arg(
             clap::Arg::with_name("FILE")
                 .help("The path of the file to analyze")
                 .required(true)
@@ -178,7 +188,9 @@ fn main() {
         )
         .get_matches();
 
-    let inpath = PathBuf::from(matches.value_of_os("FILE").unwrap());
+    let exts = matches.values_of("ext");
+    let inpath_str = matches.value_of_os("FILE").unwrap();
+    let inpath = PathBuf::from(inpath_str);
     let f = File::open(inpath).expect("can't open object file");
     let buf = unsafe { memmap::Mmap::map(&f).expect("can't memmap object file") };
 
@@ -198,6 +210,21 @@ fn main() {
     let mut seen_groups = HashSet::new();
     let mut max_gen_code = 100;
 
+    if let Some(ref m) = inpath_str.to_str() {
+        print!("{}: ", *m);
+    }
+
+    let mut first = true;
+    let mut ret = 0;
+    let mut check = true;
+    let mut descs = HashSet::new();
+    if let Some(exts_v) = exts {
+        for ext in exts_v {
+            descs.insert(ext);
+        }
+    } else {
+        check = false;
+    }
     for sect in obj.sections() {
         if sect.kind() != SectionKind::Text {
             continue;
@@ -218,8 +245,23 @@ fn main() {
                 if seen_groups.insert(group_code) {
                     // If insert returned true, we hadn't seen this code before.
                     if let Some(desc) = describe_group(group_code.0) {
+                        if !first {
+                            print!(", ");
+                        }
+                        first = false;
+                        let good = descs.contains(desc);
+                        if check && !good {
+                            ret = 1;
+                        }
+                        let fct = |x| {
+                            if check {
+                                if good {Green.bold().paint(x)} else {Red.bold().paint(x)}
+                            } else {
+                                White.bold().paint(x)
+                            }
+                        };
                         if let Some(mnemonic) = insn.mnemonic() {
-                            println!("{} ({})", desc, mnemonic);
+                            print!("{} ({})", fct(desc), mnemonic);
                             match instrset_to_cpu.get(desc) {
                                 Some(generation) => match cpu_generations.get(generation) {
                                     Some(gen_code) => {
@@ -230,7 +272,7 @@ fn main() {
                                 None => unimplemented!(),
                             }
                         } else {
-                            println!("{}", desc);
+                            print!("{}", fct(desc));
                         }
                     }
                 }
@@ -238,10 +280,12 @@ fn main() {
         }
     }
 
-    match cpu_generations_reverse.get(&max_gen_code) {
-        Some(generation) => {
-            println!("CPU Generation: {}", generation);
-        }
-        None => unimplemented!(),
-    }
+    // match cpu_generations_reverse.get(&max_gen_code) {
+    //     Some(generation) => {
+    //         println!("CPU Generation: {}", generation);
+    //     }
+    //     None => unimplemented!(),
+    // }
+    println!("");
+    ::std::process::exit(ret);
 }
